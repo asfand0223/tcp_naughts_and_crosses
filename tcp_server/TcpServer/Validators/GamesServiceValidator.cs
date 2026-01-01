@@ -113,7 +113,7 @@ public class GamesServiceValidator : IGamesServiceValidator
     {
         if (arguments is null || arguments.Length != 1)
         {
-            await _socketWriterService.WriteAsync(socket, "Usage: join [game_id]");
+            await _socketWriterService.WriteAsync(socket, "Usage: leave [game_id]");
             return null;
         }
 
