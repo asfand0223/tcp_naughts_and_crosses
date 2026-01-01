@@ -13,13 +13,15 @@ public class SocketProcessorService : BackgroundService
     private readonly IConsoleInputProcessorService _consoleInputProcessService;
     private readonly ISocketService _socketService;
     private readonly ISocketReceiverService _socketReceiverService;
+    private readonly ISocketWriterService _socketWriterService;
 
     public SocketProcessorService(
         IHostApplicationLifetime hostApplicationLifetime,
         ILogger<SocketProcessorService> logger,
         IConsoleInputProcessorService consoleInputProcessorService,
         ISocketService socketService,
-        ISocketReceiverService socketReceiverService
+        ISocketReceiverService socketReceiverService,
+        ISocketWriterService socketWriterService
     )
     {
         _hostApplicationLifetime = hostApplicationLifetime;
@@ -29,6 +31,7 @@ public class SocketProcessorService : BackgroundService
         _consoleInputProcessService = consoleInputProcessorService;
         _socketService = socketService;
         _socketReceiverService = socketReceiverService;
+        _socketWriterService = socketWriterService;
     }
 
     protected override async Task ExecuteAsync(CancellationToken cancellationToken)
@@ -52,6 +55,7 @@ public class SocketProcessorService : BackgroundService
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
+        await _socketWriterService.WriteAsync(_socketService.Socket, "quit");
         _socketService.Stop();
 
         await base.StopAsync(cancellationToken);

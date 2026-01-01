@@ -1,6 +1,7 @@
 namespace TcpServer.Services;
 
 using System.Net.Sockets;
+using Microsoft.Extensions.Logging;
 
 public interface IMessageHandlerService
 {
@@ -9,10 +10,12 @@ public interface IMessageHandlerService
 
 public class MessageHandlerService : IMessageHandlerService
 {
-    public IGamesService _gamesService;
+    private readonly ILogger<MessageHandlerService> _logger;
+    private readonly IGamesService _gamesService;
 
-    public MessageHandlerService(IGamesService gamesService)
+    public MessageHandlerService(ILogger<MessageHandlerService> logger, IGamesService gamesService)
     {
+        _logger = logger;
         _gamesService = gamesService;
     }
 
@@ -38,7 +41,15 @@ public class MessageHandlerService : IMessageHandlerService
             case "list":
                 await _gamesService.ListAllGames(socket);
                 break;
+            case "leave":
+                await _gamesService.LeaveGame(socket, arguments);
+                break;
+            case "quit":
+                await _gamesService.LeaveGame(socket);
+                _logger.LogInformation("Socket disconnected");
+                break;
             default:
+                Console.WriteLine(message);
                 break;
         }
     }

@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using TcpServer.Models;
+using TcpServer.Validators;
 
 public interface IGamesService
 {
@@ -12,6 +13,8 @@ public interface IGamesService
     public Task CreateGame(Socket socket);
     public Task ListAllGames(Socket socket);
     public Task JoinGame(Socket socket, string[]? arguments);
+    public Task LeaveGame(Socket socket, string[]? arguments);
+    public Task LeaveGame(Socket socket);
 }
 
 public class GamesService : IGamesService
@@ -20,25 +23,19 @@ public class GamesService : IGamesService
 
     private readonly ILogger<GamesService> _logger;
     private readonly ISocketWriterService _socketWriterService;
+    private readonly IGamesServiceValidator _gamesServiceValidator;
 
-    public GamesService(ILogger<GamesService> logger, ISocketWriterService socketWriterService)
+    public GamesService(
+        ILogger<GamesService> logger,
+        ISocketWriterService socketWriterService,
+        IGamesServiceValidator gamesServiceValidator
+    )
     {
         Games = new List<Game>();
+
         _logger = logger;
         _socketWriterService = socketWriterService;
-    }
-
-    public async Task CreateGame(Socket socket)
-    {
-        var newGame = new Game
-        {
-            Id = Guid.NewGuid(),
-            PlayerOneSocket = socket,
-            GameState = GameState.CREATED,
-        };
-        Games.Add(newGame);
-
-        await _socketWriterService.WriteAsync(socket, $"Created game with id {newGame.Id}");
+        _gamesServiceValidator = gamesServiceValidator;
     }
 
     public async Task ListAllGames(Socket socket)
@@ -59,9 +56,22 @@ public class GamesService : IGamesService
         await _socketWriterService.WriteAsync(socket, sb.ToString());
     }
 
+    public async Task CreateGame(Socket socket)
+    {
+        var newGame = new Game
+        {
+            Id = Guid.NewGuid(),
+            PlayerOneSocket = socket,
+            GameState = GameState.CREATED,
+        };
+        Games.Add(newGame);
+
+        await _socketWriterService.WriteAsync(socket, $"created {newGame.Id}");
+    }
+
     public async Task JoinGame(Socket socket, string[]? arguments)
     {
-        var game = await ValidateJoinGame(socket, arguments);
+        var game = await _gamesServiceValidator.ValidateJoinGame(Games, socket, arguments);
         if (game is null)
         {
             return;
@@ -76,87 +86,65 @@ public class GamesService : IGamesService
         await _socketWriterService.WriteAsync(game.PlayerTwoSocket, $"Joined game {game.Id}");
     }
 
-    public async Task<Game?> ValidateJoinGame(Socket socket, string[]? arguments)
+    public async Task LeaveGame(Socket socket, string[]? arguments)
     {
-        var gameId = await ValidateJoinGameArguments(socket, arguments);
+        var gameId = await _gamesServiceValidator.ValidateLeaveGame(socket, arguments);
         if (gameId is null)
         {
-            return null;
+            return;
         }
 
-        var game = await ValidateGame(socket, gameId.Value);
-        if (game is null)
-        {
-            return null;
-        }
-
-        var hasValidGameSockets = await ValidateGameSockets(socket, game);
-        if (!hasValidGameSockets)
-        {
-            return null;
-        }
-
-        return game;
-    }
-
-    public async Task<Guid?> ValidateJoinGameArguments(Socket socket, string[]? arguments)
-    {
-        if (arguments is null || arguments.Length != 1)
-        {
-            await _socketWriterService.WriteAsync(socket, "Usage: join [game_id]");
-            return null;
-        }
-
-        if (!Guid.TryParse(arguments[0], out var gameId))
-        {
-            await _socketWriterService.WriteAsync(socket, $"Invalid game {gameId}");
-            return null;
-        }
-
-        return gameId;
-    }
-
-    public async Task<Game?> ValidateGame(Socket socket, Guid gameId)
-    {
         var game = Games.FirstOrDefault(g => g.Id == gameId);
+
         if (game is null)
         {
             await _socketWriterService.WriteAsync(socket, $"Unable to find game {gameId}");
-            return null;
+            return;
         }
 
-        return game;
+        if (game.PlayerOneSocket != socket && game.PlayerTwoSocket != socket)
+        {
+            await _socketWriterService.WriteAsync(socket, $"You are not in game {gameId}");
+            return;
+        }
+
+        if (game.PlayerOneSocket == socket)
+        {
+            game.PlayerOneSocket = null;
+        }
+        else if (game.PlayerTwoSocket == socket)
+        {
+            game.PlayerTwoSocket = null;
+        }
+
+        if (game.PlayerOneSocket is null && game.PlayerTwoSocket is null)
+        {
+            Games.RemoveAll(g => g.Id == gameId);
+        }
+
+        await _socketWriterService.WriteAsync(socket, $"Left game {gameId}");
     }
 
-    public async Task<bool> ValidateGameSockets(Socket socket, Game game)
+    public async Task LeaveGame(Socket socket)
     {
-        if (game.PlayerOneSocket is null)
+        var games = Games.FindAll(g => g.PlayerOneSocket == socket || g.PlayerTwoSocket == socket);
+        games.ForEach(g =>
         {
-            await _socketWriterService.WriteAsync(socket, "Player one has left  game {gameId}");
-            return false;
-        }
+            if (g.PlayerOneSocket == socket)
+            {
+                g.PlayerOneSocket = null;
+            }
+            else if (g.PlayerTwoSocket == socket)
+            {
+                g.PlayerTwoSocket = null;
+            }
 
-        if (
-            socket == game.PlayerOneSocket
-            || (game.PlayerTwoSocket is not null && game.PlayerTwoSocket == socket)
-        )
-        {
-            await _socketWriterService.WriteAsync(
-                socket,
-                $"You have already joined game {game.Id}"
-            );
-            return false;
-        }
+            if (g.PlayerOneSocket == null && g.PlayerTwoSocket == null)
+            {
+                Games.Remove(g);
+            }
+        });
 
-        if (game.PlayerTwoSocket is not null)
-        {
-            await _socketWriterService.WriteAsync(
-                socket,
-                $"There are already two players in game {game.Id}"
-            );
-            return false;
-        }
-
-        return true;
+        await _socketWriterService.WriteAsync(socket, $"You have quit");
     }
 }

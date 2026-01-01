@@ -33,18 +33,37 @@ public class ConsoleInputProcessorService : IConsoleInputProcessorService
         {
             Console.WriteLine("Type to enter a message:");
 
-            var message = Console.ReadLine();
+            var message = await ReadLineAsnc(cancellationToken);
 
-            if (message is not null)
+            if (message is null)
             {
-                if (message.ToLower() == "quit")
-                {
-                    _hostApplicationLifetime.StopApplication();
-                    break;
-                }
-
-                await _socketWriterService.WriteAsync(socket, message);
+                continue;
             }
+
+            if (message.Equals("quit", StringComparison.OrdinalIgnoreCase))
+            {
+                _hostApplicationLifetime.StopApplication();
+                break;
+            }
+
+            await _socketWriterService.WriteAsync(socket, message);
         }
+    }
+
+    public async Task<string?> ReadLineAsnc(CancellationToken cancellationToken)
+    {
+        var readTask = Task.Run(() => Console.ReadLine(), cancellationToken);
+
+        var completed = await Task.WhenAny(
+            readTask,
+            Task.Delay(Timeout.Infinite, cancellationToken)
+        );
+
+        if (completed == readTask)
+        {
+            return readTask.Result;
+        }
+
+        return null;
     }
 }

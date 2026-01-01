@@ -39,7 +39,7 @@ public class SocketReceiverService : ISocketReceiverService
 
             string message = Encoding.UTF8.GetString(messageBuffer, 0, messageBuffer.Length);
 
-            _messageHandlerService.Handle(socket, message);
+            await _messageHandlerService.Handle(socket, message);
         }
     }
 

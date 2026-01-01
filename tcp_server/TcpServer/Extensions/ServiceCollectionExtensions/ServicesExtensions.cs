@@ -2,6 +2,7 @@ namespace TcpServer.Extensions.ServiceCollectionExtensions;
 
 using Microsoft.Extensions.DependencyInjection;
 using TcpServer.Services;
+using TcpServer.Validators;
 
 public static class ServicesExtensions
 {
@@ -9,6 +10,7 @@ public static class ServicesExtensions
     {
         ConfigureAppHostedServices(services);
         ConfigureAppServices(services);
+        ConfigureServiceValidators(services);
 
         return services;
     }
@@ -27,6 +29,13 @@ public static class ServicesExtensions
         services.AddSingleton<IMessageHandlerService, MessageHandlerService>();
         services.AddSingleton<IGamesService, GamesService>();
         services.AddSingleton<ISocketWriterService, SocketWriterService>();
+
+        return services;
+    }
+
+    private static IServiceCollection ConfigureServiceValidators(IServiceCollection services)
+    {
+        services.AddSingleton<IGamesServiceValidator, GamesServiceValidator>();
 
         return services;
     }
